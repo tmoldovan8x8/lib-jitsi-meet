@@ -130,6 +130,12 @@ export class E2EEncryption {
 
         this._enabled = enabled;
 
+        if (enabled) {
+            await this._olmAdapter.initSessions();
+        }
+
+        this.conference.setLocalParticipantProperty('e2ee.enabled', enabled);
+
         if (!this._initialized && enabled) {
             // Generate a frame signing key pair. Per session currently.
             this._signatureKeyPair = await crypto.subtle.generateKey(SIGNATURE_OPTIONS,
@@ -297,7 +303,7 @@ export class E2EEncryption {
 
         this._key = new Uint8Array(newKey);
 
-        const index = await this._olmAdapter.updateCurrentKey(this._key);
+        const index = await this._olmAdapter.updateKey(this._key);
 
         this._e2eeCtx.setKey(this.conference.myUserId(), this._key, index);
     }

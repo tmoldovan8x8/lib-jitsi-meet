@@ -62,16 +62,58 @@ export class OlmAdapter extends Listenable {
         this._key = undefined;
         this._keyIndex = -1;
         this._reqs = new Map();
+        this.sessions = new Object();
+        this._sessionInitialization = undefined;
 
         if (OlmAdapter.isSupported()) {
             this._bootstrapOlm();
 
             this._conf.on(JitsiConferenceEvents.ENDPOINT_MESSAGE_RECEIVED, this._onEndpointMessageReceived.bind(this));
-            this._conf.on(JitsiConferenceEvents.CONFERENCE_JOINED, this._onConferenceJoined.bind(this));
             this._conf.on(JitsiConferenceEvents.CONFERENCE_LEFT, this._onConferenceLeft.bind(this));
             this._conf.on(JitsiConferenceEvents.USER_LEFT, this._onParticipantLeft.bind(this));
+            this._conf.on(JitsiConferenceEvents.USER_JOINED, this._onParticipantJoined.bind(this));
         } else {
             this._init.reject(new Error('Olm not supported'));
+        }
+    }
+
+    /**
+     * Handles the conference joined event. Upon joining a conference, the participant
+     * who just joined will start new olm sessions with every other participant.
+     *
+     */
+    async initSessions() {
+        if (this._sessionInitialization) {
+            await this._sessionInitialization();
+        } else {
+            this._sessionInitialization = new Deferred();
+
+            logger.debug('Conference joined');
+
+            await this._init;
+
+            const promises = [];
+
+            const localParticipantId = this._conf.myUserId().toString();
+            // Establish a 1-to-1 Olm session with every participant in the conference.
+            // We are forcing the last user to join the conference to start the exchange
+            // so we can send some pre-established secrets in the ACK.
+            for (const participant of this._conf.getParticipants()) {
+                if (localParticipantId < participant.getId().toString()) {
+                    promises.push(this._sendSessionInit(participant));
+                } else {
+                    this.sessions[participant.getId()] = new Deferred();
+                    promises.push(this.sessions[participant.getId()]);
+                }
+            }
+
+            await Promise.allSettled(promises);
+
+            // TODO: retry failed ones.
+            // TODO: skip participants which don't support E2EE.
+
+            this._sessionInitialization.resolve();
+            this._sessionInitialization = undefined;
         }
     }
 
@@ -82,19 +124,6 @@ export class OlmAdapter extends Listenable {
      */
     static isSupported() {
         return typeof window.Olm !== 'undefined';
-    }
-
-    /**
-     * Updates the current participant key and distributes it to all participants in the conference
-     * by sending a key-info message.
-     *
-     * @param {Uint8Array|boolean} key - The new key.
-     * @returns {number}
-     */
-    async updateCurrentKey(key) {
-        this._key = key;
-
-        return this._keyIndex;
     }
 
     /**
@@ -117,7 +146,6 @@ export class OlmAdapter extends Listenable {
             const olmData = this._getParticipantOlmData(participant);
 
             // TODO: skip those who don't support E2EE.
-
             if (!olmData.session) {
                 logger.warn(`Tried to send key to participant ${pId} but we have no session`);
 
@@ -216,32 +244,6 @@ export class OlmAdapter extends Listenable {
     }
 
     /**
-     * Handles the conference joined event. Upon joining a conference, the participant
-     * who just joined will start new olm sessions with every other participant.
-     *
-     * @private
-     */
-    async _onConferenceJoined() {
-        logger.debug('Conference joined');
-
-        await this._init;
-
-        const promises = [];
-
-        // Establish a 1-to-1 Olm session with every participant in the conference.
-        // We are forcing the last user to join the conference to start the exchange
-        // so we can send some pre-established secrets in the ACK.
-        for (const participant of this._conf.getParticipants()) {
-            promises.push(this._sendSessionInit(participant));
-        }
-
-        await Promise.allSettled(promises);
-
-        // TODO: retry failed ones.
-        // TODO: skip participants which don't support E2EE.
-    }
-
-    /**
      * Handles leaving the conference, cleaning up olm sessions.
      *
      * @private
@@ -311,7 +313,6 @@ export class OlmAdapter extends Listenable {
                 };
 
                 this._sendMessage(ack, pId);
-
                 this.eventEmitter.emit(OlmAdapterEvents.PARTICIPANT_E2EE_CHANNEL_READY, pId);
             }
             break;
@@ -351,6 +352,9 @@ export class OlmAdapter extends Listenable {
                     olmData.lastKey = key;
                     this.eventEmitter.emit(OlmAdapterEvents.PARTICIPANT_KEY_UPDATED, pId, key, keyIndex);
                 }
+
+                this.sessions[pId].resolve();
+                this.sessions[pId] = undefined;
             } else {
                 logger.warn('Received ACK with the wrong UUID');
 
@@ -427,7 +431,15 @@ export class OlmAdapter extends Listenable {
             break;
         }
         }
+    }
 
+    /**
+     * Handles a participant leaving. When a participant leaves their olm session is destroyed.
+     *
+     * @private
+     */
+     _onParticipantJoined(id, participant) {
+        this.initSessions();
     }
 
     /**

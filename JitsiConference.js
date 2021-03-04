@@ -1974,7 +1974,7 @@ JitsiConference.prototype._acceptJvbIncomingCall = function(
     try {
         jingleSession.initialize(this.room, this.rtc, {
             ...this.options.config,
-            enableInsertableStreams: this._isE2EEEnabled()
+            enableInsertableStreams: this.isE2EEEnabled()
         });
     } catch (error) {
         GlobalOnErrorHandler.callErrorHandler(error);
@@ -2729,7 +2729,7 @@ JitsiConference.prototype._acceptP2PIncomingCall = function(
         this.room,
         this.rtc, {
             ...this.options.config,
-            enableInsertableStreams: this._isE2EEEnabled()
+            enableInsertableStreams: this.isE2EEEnabled()
         });
 
     logger.info('Starting CallStats for P2P connection...');
@@ -3089,7 +3089,7 @@ JitsiConference.prototype._startP2PSession = function(remoteJid) {
         this.room,
         this.rtc, {
             ...this.options.config,
-            enableInsertableStreams: this._isE2EEEnabled()
+            enableInsertableStreams: this.isE2EEEnabled()
         });
 
     logger.info('Starting CallStats for P2P connection...');
@@ -3481,7 +3481,7 @@ JitsiConference.prototype._restartMediaSessions = function() {
  *
  * @returns {boolean}
  */
-JitsiConference.prototype._isE2EEEnabled = function() {
+JitsiConference.prototype.isE2EEEnabled = function() {
     return this._e2eEncryption && this._e2eEncryption.isEnabled();
 };
 
