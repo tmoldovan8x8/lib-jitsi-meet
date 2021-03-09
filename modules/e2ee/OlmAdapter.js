@@ -172,6 +172,11 @@ export class OlmAdapter extends Listenable {
         return this._keyIndex;
     }
 
+    /**
+     * Updates the current participant key.
+     * @param {Uint8Array|boolean} key - The new key.
+     * @returns {number}
+    */
     async updateCurrentKey(key) {
         this._key = key;
 
@@ -432,29 +437,28 @@ export class OlmAdapter extends Listenable {
      *
      * @private
      */
-     async _onParticipantJoined(id, participant) {
+    async _onParticipantJoined(id, participant) {
         if (this._conf.isE2EEEnabled()) {
             await this.initSessions();
 
-            console.log("XXX hereid ", id)
-            console.log("xxx participant", participant.getId())
-
             const localParticipantId = this._conf.myUserId().toString();
+
             if (localParticipantId < id.toString()) {
-                    const olmData = this._getParticipantOlmData(participant);
-                    const uuid = uuidv4();
-                    const data = {
-                        [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
-                        olm: {
-                            type: OLM_MESSAGE_TYPES.KEY_INFO,
-                            data: {
-                                ciphertext: this._encryptKeyInfo(olmData.session),
-                                uuid
-                            }
+                const olmData = this._getParticipantOlmData(participant);
+                const uuid = uuidv4();
+                const data = {
+                    [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
+                    olm: {
+                        type: OLM_MESSAGE_TYPES.KEY_INFO,
+                        data: {
+                            ciphertext: this._encryptKeyInfo(olmData.session),
+                            uuid
                         }
-                    };
-                    this._sendMessage(data, id);
-                }
+                    }
+                };
+
+                this._sendMessage(data, id);
+            }
         }
     }
 
