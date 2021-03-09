@@ -62,7 +62,6 @@ export class OlmAdapter extends Listenable {
         this._key = undefined;
         this._keyIndex = -1;
         this._reqs = new Map();
-        this.sessions = new Object();
         this._sessionInitialization = undefined;
 
         if (OlmAdapter.isSupported()) {
@@ -72,6 +71,7 @@ export class OlmAdapter extends Listenable {
             this._conf.on(JitsiConferenceEvents.CONFERENCE_LEFT, this._onConferenceLeft.bind(this));
             this._conf.on(JitsiConferenceEvents.USER_LEFT, this._onParticipantLeft.bind(this));
             this._conf.on(JitsiConferenceEvents.USER_JOINED, this._onParticipantJoined.bind(this));
+            //this._conf.on(JitsiConferenceEvents.CONFERENCE_JOINED, this._onConferenceJoined.bind(this));
         } else {
             this._init.reject(new Error('Olm not supported'));
         }
@@ -82,9 +82,9 @@ export class OlmAdapter extends Listenable {
      * who just joined will start new olm sessions with every other participant.
      *
      */
-    async initSessions() {
+    async initSessions(all = false) {
         if (this._sessionInitialization) {
-            await this._sessionInitialization();
+            await this._sessionInitialization;
         } else {
             this._sessionInitialization = new Deferred();
 
@@ -95,16 +95,11 @@ export class OlmAdapter extends Listenable {
             const promises = [];
 
             const localParticipantId = this._conf.myUserId().toString();
-            // Establish a 1-to-1 Olm session with every participant in the conference.
-            // We are forcing the last user to join the conference to start the exchange
-            // so we can send some pre-established secrets in the ACK.
-            for (const participant of this._conf.getParticipants()) {
-                if (localParticipantId < participant.getId().toString()) {
-                    promises.push(this._sendSessionInit(participant));
-                } else {
-                    this.sessions[participant.getId()] = new Deferred();
-                    promises.push(this.sessions[participant.getId()]);
-                }
+            const filterFunction = all ? () => true : p => localParticipantId < p.getId().toString();
+            const participants = this._conf.getParticipants().filter(filterFunction);
+
+            for (const participant of participants) {
+                promises.push(this._sendSessionInit(participant));
             }
 
             await Promise.allSettled(promises);
@@ -352,9 +347,6 @@ export class OlmAdapter extends Listenable {
                     olmData.lastKey = key;
                     this.eventEmitter.emit(OlmAdapterEvents.PARTICIPANT_KEY_UPDATED, pId, key, keyIndex);
                 }
-
-                this.sessions[pId].resolve();
-                this.sessions[pId] = undefined;
             } else {
                 logger.warn('Received ACK with the wrong UUID');
 
@@ -438,8 +430,36 @@ export class OlmAdapter extends Listenable {
      *
      * @private
      */
-     _onParticipantJoined(id, participant) {
-        this.initSessions();
+     async _onParticipantJoined(id, participant) {
+        if (this._conf.isE2EEEnabled()) {
+            await this.initSessions();
+
+            console.log("XXX hereid ", id)
+            console.log("xxx participant", participant.getId())
+
+            const localParticipantId = this._conf.myUserId().toString();
+            if (localParticipantId < id.toString()) {
+                    const olmData = this._getParticipantOlmData(participant);
+                    const uuid = uuidv4();
+                    const data = {
+                        [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
+                        olm: {
+                            type: OLM_MESSAGE_TYPES.KEY_INFO,
+                            data: {
+                                ciphertext: this._encryptKeyInfo(olmData.session),
+                                uuid
+                            }
+                        }
+                    };
+                    this._sendMessage(data, id);
+                }
+        }
+    }
+
+    async updateCurrentKey(key) {
+        this._key = key;
+
+        return this._keyIndex;
     }
 
     /**

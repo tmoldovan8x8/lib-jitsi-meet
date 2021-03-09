@@ -303,7 +303,7 @@ export class E2EEncryption {
 
         this._key = new Uint8Array(newKey);
 
-        const index = await this._olmAdapter.updateKey(this._key);
+        const index = await this._olmAdapter.updateCurrentKey(this._key);
 
         this._e2eeCtx.setKey(this.conference.myUserId(), this._key, index);
     }
