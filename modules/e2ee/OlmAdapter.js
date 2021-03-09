@@ -69,37 +69,31 @@ export class OlmAdapter extends Listenable {
 
             this._conf.on(JitsiConferenceEvents.ENDPOINT_MESSAGE_RECEIVED, this._onEndpointMessageReceived.bind(this));
             this._conf.on(JitsiConferenceEvents.CONFERENCE_LEFT, this._onConferenceLeft.bind(this));
-            this._conf.on(JitsiConferenceEvents.USER_LEFT, this._onParticipantLeft.bind(this));
             this._conf.on(JitsiConferenceEvents.USER_JOINED, this._onParticipantJoined.bind(this));
-            //this._conf.on(JitsiConferenceEvents.CONFERENCE_JOINED, this._onConferenceJoined.bind(this));
+            this._conf.on(JitsiConferenceEvents.USER_LEFT, this._onParticipantLeft.bind(this));
         } else {
             this._init.reject(new Error('Olm not supported'));
         }
     }
 
     /**
-     * Handles the conference joined event. Upon joining a conference, the participant
-     * who just joined will start new olm sessions with every other participant.
-     *
+     * Starts new olm sessions with every other participant that has the participantId "smaller" the localParticipantId.
      */
-    async initSessions(all = false) {
+    async initSessions() {
         if (this._sessionInitialization) {
             await this._sessionInitialization;
         } else {
             this._sessionInitialization = new Deferred();
 
-            logger.debug('Conference joined');
-
             await this._init;
 
             const promises = [];
-
             const localParticipantId = this._conf.myUserId().toString();
-            const filterFunction = all ? () => true : p => localParticipantId < p.getId().toString();
-            const participants = this._conf.getParticipants().filter(filterFunction);
 
-            for (const participant of participants) {
-                promises.push(this._sendSessionInit(participant));
+            for (const participant of this._conf.getParticipants()) {
+                if (localParticipantId < participant.getId().toString()) {
+                    promises.push(this._sendSessionInit(participant));
+                }
             }
 
             await Promise.allSettled(promises);
@@ -174,6 +168,12 @@ export class OlmAdapter extends Listenable {
         await Promise.allSettled(promises);
 
         // TODO: retry failed ones?
+
+        return this._keyIndex;
+    }
+
+    async updateCurrentKey(key) {
+        this._key = key;
 
         return this._keyIndex;
     }
@@ -426,7 +426,9 @@ export class OlmAdapter extends Listenable {
     }
 
     /**
-     * Handles a participant leaving. When a participant leaves their olm session is destroyed.
+     * Handles a participant joining. Id e2ee is enabled,
+     * when a participant joines an olm session is initialized if participantId is
+     * "smaller" than the localParticipantId.
      *
      * @private
      */
@@ -454,12 +456,6 @@ export class OlmAdapter extends Listenable {
                     this._sendMessage(data, id);
                 }
         }
-    }
-
-    async updateCurrentKey(key) {
-        this._key = key;
-
-        return this._keyIndex;
     }
 
     /**
