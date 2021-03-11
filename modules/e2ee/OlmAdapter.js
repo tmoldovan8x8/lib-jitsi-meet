@@ -445,20 +445,20 @@ export class OlmAdapter extends Listenable {
                 await this._init;
                 this._sendSessionInit(participant).then(() => {
                     const olmData = this._getParticipantOlmData(participant);
-                        const uuid = uuidv4();
-                        const data = {
-                            [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
-                            olm: {
-                                type: OLM_MESSAGE_TYPES.KEY_INFO,
-                                data: {
-                                    ciphertext: this._encryptKeyInfo(olmData.session),
-                                    uuid
-                                }
+                    const uuid = uuidv4();
+                    const data = {
+                        [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
+                        olm: {
+                            type: OLM_MESSAGE_TYPES.KEY_INFO,
+                            data: {
+                                ciphertext: this._encryptKeyInfo(olmData.session),
+                                uuid
                             }
-                        };
-        
-                        this._sendMessage(data, id);
-                }); 
+                        }
+                    };
+
+                    this._sendMessage(data, id);
+                });
             }
         }
     }
