@@ -88,10 +88,10 @@ export class OlmAdapter extends Listenable {
             await this._init;
 
             const promises = [];
-            const localParticipantId = this._conf.myUserId().toString();
+            const localParticipantId = this._conf.myUserId();
 
             for (const participant of this._conf.getParticipants()) {
-                if (localParticipantId < participant.getId().toString()) {
+                if (localParticipantId < participant.getId()) {
                     promises.push(this._sendSessionInit(participant));
                 }
             }
@@ -439,25 +439,26 @@ export class OlmAdapter extends Listenable {
      */
     async _onParticipantJoined(id, participant) {
         if (this._conf.isE2EEEnabled()) {
-            await this.initSessions();
+            const localParticipantId = this._conf.myUserId();
 
-            const localParticipantId = this._conf.myUserId().toString();
-
-            if (localParticipantId < id.toString()) {
-                const olmData = this._getParticipantOlmData(participant);
-                const uuid = uuidv4();
-                const data = {
-                    [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
-                    olm: {
-                        type: OLM_MESSAGE_TYPES.KEY_INFO,
-                        data: {
-                            ciphertext: this._encryptKeyInfo(olmData.session),
-                            uuid
-                        }
-                    }
-                };
-
-                this._sendMessage(data, id);
+            if (localParticipantId < id) {
+                await this._init;
+                this._sendSessionInit(participant).then(() => {
+                    const olmData = this._getParticipantOlmData(participant);
+                        const uuid = uuidv4();
+                        const data = {
+                            [JITSI_MEET_MUC_TYPE]: OLM_MESSAGE_TYPE,
+                            olm: {
+                                type: OLM_MESSAGE_TYPES.KEY_INFO,
+                                data: {
+                                    ciphertext: this._encryptKeyInfo(olmData.session),
+                                    uuid
+                                }
+                            }
+                        };
+        
+                        this._sendMessage(data, id);
+                }); 
             }
         }
     }
