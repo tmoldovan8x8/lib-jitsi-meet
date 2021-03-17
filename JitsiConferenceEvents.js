@@ -365,3 +365,5 @@ export const LOBBY_USER_UPDATED = 'conference.lobby.userUpdated';
  * A user left the lobby room.
  */
 export const LOBBY_USER_LEFT = 'conference.lobby.userLeft';
+
+export const E2EE_MAX_MODE_CHANGED = 'e2ee.max.mode.changed';

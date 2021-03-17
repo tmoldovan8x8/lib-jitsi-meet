@@ -40,6 +40,7 @@ export class E2EEncryption {
         this._initialized = false;
         this._key = undefined;
         this._signatureKeyPair = undefined;
+        this._e2eeMaxMode = false;
 
         this._e2eeCtx = new E2EEContext();
         this._olmAdapter = new OlmAdapter(conference);
@@ -136,6 +137,8 @@ export class E2EEncryption {
 
         this.conference.setLocalParticipantProperty('e2ee.enabled', enabled);
 
+        this._sendMaxModeChanged();
+
         if (!this._initialized && enabled) {
             // Generate a frame signing key pair. Per session currently.
             this._signatureKeyPair = await crypto.subtle.generateKey(SIGNATURE_OPTIONS,
@@ -222,6 +225,8 @@ export class E2EEncryption {
         if (this._conferenceJoined && this._enabled) {
             this._ratchetKey();
         }
+
+        this._sendMaxModeChanged();
     }
 
     /**
@@ -236,6 +241,8 @@ export class E2EEncryption {
         if (this._enabled) {
             this._rotateKey();
         }
+
+        this._sendMaxModeChanged();
     }
 
     /**
@@ -374,6 +381,20 @@ export class E2EEncryption {
             for (const session of this.conference._getMediaSessions()) {
                 this._setupSenderE2EEForTrack(session, track);
             }
+        }
+    }
+
+    _sendMaxModeChanged() {
+        const { conference } = this;
+        const maxParticipantsAllowed = conference.isE2EEEnabled() ? 3 : 2;
+        const maxParticipantsReached = conference.getParticipantCount() >= maxParticipantsAllowed;
+
+        if (this._e2eeMaxMode !== maxParticipantsReached) {
+            this._e2eeMaxMode = maxParticipantsReached;
+            conference.eventEmitter.emit(
+                JitsiConferenceEvents.E2EE_MAX_MODE_CHANGED,
+                maxParticipantsReached
+            );
         }
     }
 }

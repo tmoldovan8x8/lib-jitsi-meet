@@ -147,6 +147,7 @@ export default function JitsiConference(options) {
         video: false
     };
     this.isMutedByFocus = false;
+    this._lobbyAutoRejectEnabled = true;
 
     // when muted by focus we receive the jid of the initiator of the mute
     this.mutedByFocusActor = null;
@@ -364,6 +365,9 @@ JitsiConference.prototype._init = function(options = {}) {
 
     this._sendConferenceJoinAnalyticsEvent = this._sendConferenceJoinAnalyticsEvent.bind(this);
     this.room.addListener(XMPPEvents.MEETING_ID_SET, this._sendConferenceJoinAnalyticsEvent);
+
+    this._onLobbyMemberJoined = this._onLobbyMemberJoined.bind(this);
+    this.room.addListener(XMPPEvents.MUC_LOBBY_MEMBER_JOINED, this._onLobbyMemberJoined);
 
     this.e2eping = new E2ePing(
         this,
@@ -3428,6 +3432,12 @@ JitsiConference.prototype._sendConferenceJoinAnalyticsEvent = function() {
     this._conferenceJoinAnalyticsEventSent = Date.now();
 };
 
+JitsiConference.prototype._onLobbyMemberJoined = function(id) {
+    if (this._lobbyAutoRejectEnabled) {
+        this.lobbyDenyAccess(id)
+    }
+};
+
 /**
  * Sends conference.left analytics event.
  * @private
@@ -3509,6 +3519,10 @@ JitsiConference.prototype.toggleE2EE = function(enabled) {
     }
 
     this._e2eEncryption.setEnabled(enabled);
+};
+
+JitsiConference.prototype.toggleLobbyAutoReject = function(enabled) {
+    this._lobbyAutoRejectEnabled = enabled;
 };
 
 /**
