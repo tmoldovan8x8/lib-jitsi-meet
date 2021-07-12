@@ -115,6 +115,7 @@ export class Context {
         if (this._cryptoKeyRing[keyIndex]) {
             const iv = this._makeIV(encodedFrame.getMetadata().synchronizationSource, encodedFrame.timestamp);
 
+            console.log("XXX _cryptoKeyRing", this._cryptoKeyRing[keyIndex].encryptionKey);
             // Thіs is not encrypted and contains the VP8 payload descriptor or the Opus TOC byte.
             const frameHeader = new Uint8Array(encodedFrame.data, 0, UNENCRYPTED_BYTES[encodedFrame.type]);
 
@@ -132,25 +133,38 @@ export class Context {
             // payload  |IV...(length = IV_LENGTH)|R|IV_LENGTH|KID |
             // ---------+-------------------------+-+---------+----
 
+            const myUniqueID = Math.random() * 250000;
+
+            console.log("XXX encrypting original" + myUniqueID, new Uint8Array(encodedFrame.data,
+                UNENCRYPTED_BYTES[encodedFrame.type], 5));
+
+            const knownArray = new Uint8Array( 
+                    [15, 130, 222, 121, 98]
+                );
+    
             return crypto.subtle.encrypt({
                 name: ENCRYPTION_ALGORITHM,
-                iv,
-                additionalData: new Uint8Array(encodedFrame.data, 0, frameHeader.byteLength)
-            }, this._cryptoKeyRing[keyIndex].encryptionKey, new Uint8Array(encodedFrame.data,
-                UNENCRYPTED_BYTES[encodedFrame.type]))
+                iv
+                //,additionalData: new Uint8Array(encodedFrame.data, 0, frameHeader.byteLength)
+            }, this._cryptoKeyRing[keyIndex].encryptionKey, knownArray)
             .then(cipherText => {
-                const newData = new ArrayBuffer(frameHeader.byteLength + cipherText.byteLength
+                //const cipherText1 = new Uint8Array(encodedFrame.data, UNENCRYPTED_BYTES[encodedFrame.type])
+                const cipherText1 = cipherText;
+
+                console.log("XXX encrypting final" + myUniqueID, new Uint8Array(cipherText1));
+
+                const newData = new ArrayBuffer(frameHeader.byteLength + cipherText1.byteLength
                     + iv.byteLength + frameTrailer.byteLength);
                 const newUint8 = new Uint8Array(newData);
 
                 newUint8.set(frameHeader); // copy first bytes.
                 newUint8.set(
-                    new Uint8Array(cipherText), frameHeader.byteLength); // add ciphertext.
+                    new Uint8Array(cipherText1), frameHeader.byteLength); // add ciphertext.
                 newUint8.set(
-                    new Uint8Array(iv), frameHeader.byteLength + cipherText.byteLength); // append IV.
+                    new Uint8Array(iv), frameHeader.byteLength + cipherText1.byteLength); // append IV.
                 newUint8.set(
                         frameTrailer,
-                        frameHeader.byteLength + cipherText.byteLength + iv.byteLength); // append frame trailer.
+                        frameHeader.byteLength + cipherText1.byteLength + iv.byteLength); // append frame trailer.
 
                 encodedFrame.data = newData;
 
@@ -211,7 +225,6 @@ export class Context {
 
         const { encryptionKey } = this._cryptoKeyRing[keyIndex];
         let { material } = this._cryptoKeyRing[keyIndex];
-
         // Construct frame trailer. Similar to the frame header described in
         // https://tools.ietf.org/html/draft-omara-sframe-00#section-4.2
         // but we put it at the end.
@@ -234,14 +247,20 @@ export class Context {
             const cipherTextLength = encodedFrame.data.byteLength
                     - (frameHeader.byteLength + ivLength + frameTrailer.byteLength);
 
+            const myUniqueID = Math.random() * 250000;
+
+            console.log("XXX decrypting original" + myUniqueID, new Uint8Array(encodedFrame.data, cipherTextStart, cipherTextLength));
+      
             const plainText = await crypto.subtle.decrypt({
                 name: 'AES-GCM',
-                iv,
-                additionalData: new Uint8Array(encodedFrame.data, 0, frameHeader.byteLength)
+                iv
+                //,additionalData: new Uint8Array(encodedFrame.data, 0, frameHeader.byteLength)
             },
                 encryptionKey,
                 new Uint8Array(encodedFrame.data, cipherTextStart, cipherTextLength));
 
+            console.log("XXX decrypting final" + myUniqueID, new Uint8Array(plainText));
+      
             const newData = new ArrayBuffer(frameHeader.byteLength + plainText.byteLength);
             const newUint8 = new Uint8Array(newData);
 
@@ -250,18 +269,6 @@ export class Context {
 
             encodedFrame.data = newData;
         } catch (error) {
-            if (ratchetCount < RATCHET_WINDOW_SIZE) {
-                material = await importKey(await ratchet(material));
-
-                const newKey = await deriveKeys(material);
-
-                this._setKeys(newKey);
-
-                return await this._decryptFrame(
-                    encodedFrame,
-                    keyIndex,
-                    ratchetCount + 1);
-            }
 
             // TODO: notify the application about error status.
         }
@@ -291,7 +298,10 @@ export class Context {
      */
     _makeIV(synchronizationSource, timestamp) {
         const iv = new ArrayBuffer(IV_LENGTH);
-        const ivView = new DataView(iv);
+        for(let i = 0; i < IV_LENGTH; i++) {
+            iv[i] = i + 1;
+        }
+        /*const ivView = new DataView(iv);
 
         // having to keep our own send count (similar to a picture id) is not ideal.
         if (!this._sendCounts.has(synchronizationSource)) {
@@ -305,7 +315,7 @@ export class Context {
         ivView.setUint32(4, timestamp);
         ivView.setUint32(8, sendCount % 0xFFFF);
 
-        this._sendCounts.set(synchronizationSource, sendCount + 1);
+        this._sendCounts.set(synchronizationSource, sendCount + 1);*/
 
         return iv;
     }

@@ -478,7 +478,7 @@ export class OlmAdapter extends Listenable {
     */
     async _onParticipantPropertyChanged(participant, name, oldValue, newValue) {
         switch (name) {
-        case 'e2ee.enabled':
+        case 'e2ee.enabled1':
             if (newValue && this._conf.isE2EEEnabled()) {
                 const localParticipantId = this._conf.myUserId();
                 const participantId = participant.getId();

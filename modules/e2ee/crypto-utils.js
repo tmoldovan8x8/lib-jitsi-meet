@@ -8,18 +8,22 @@ export async function deriveKeys(material) {
     const info = new ArrayBuffer();
     const textEncoder = new TextEncoder();
 
+    const salt = textEncoder.encode('JFrameEncryptionKey');
+    console.log("XXX salt", salt)
     // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey#HKDF
     // https://developer.mozilla.org/en-US/docs/Web/API/HkdfParams
     const encryptionKey = await crypto.subtle.deriveKey({
         name: 'HKDF',
-        salt: textEncoder.encode('JFrameEncryptionKey'),
+        salt: salt,
         hash: 'SHA-256',
         info
     }, material, {
         name: 'AES-GCM',
         length: 128
-    }, false, [ 'encrypt', 'decrypt' ]);
+    }, true, [ 'encrypt', 'decrypt' ]);
 
+    const a = await crypto.subtle.exportKey("raw", encryptionKey);
+    console.log("XXX see here key content", a);
     return {
         material,
         encryptionKey
@@ -33,15 +37,6 @@ export async function deriveKeys(material) {
  * @returns {ArrayBuffer} - ratcheted key material
  */
 export async function ratchet(material) {
-    const textEncoder = new TextEncoder();
-
-    // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveBits
-    return crypto.subtle.deriveBits({
-        name: 'HKDF',
-        salt: textEncoder.encode('JFrameRatchetKey'),
-        hash: 'SHA-256',
-        info: new ArrayBuffer()
-    }, material, 256);
 }
 
 /**
